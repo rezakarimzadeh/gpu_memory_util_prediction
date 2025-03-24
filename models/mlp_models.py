@@ -99,3 +99,47 @@ class EnsembleModel(pl.LightningModule):
     
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.learning_rate)
+
+
+class EnsembleModelRegression(pl.LightningModule):
+    def __init__(self, model_list, input_size, output_size, max_neurons, min_neurons, learning_rate):
+        """
+        Initializes an ensemble of random MLP models.
+        
+        Parameters:
+        - model_list (list): a list of depth for mlps
+        - input_size (int): Number of input features
+        - output_size (int): Number of output classes (binary classification)
+        - max_layers (int): Maximum number of hidden layers per MLP
+        - max_neurons (int): Maximum number of neurons in the first hidden layer of each MLP
+        - min_neurons (int): Minimum number of neurons in the last hidden layer of each MLP
+        - learning_rate (float): Learning rate for training
+        """
+        super(EnsembleModelRegression, self).__init__()
+        self.models = nn.ModuleList(
+            [RandomMLP(input_size, output_size, depth, max_neurons, min_neurons, learning_rate) for depth in model_list]
+        )
+        self.learning_rate = learning_rate
+
+
+    def forward(self, x):
+        # Average the predictions from all models
+        outputs = [model(x) for model in self.models]
+        return torch.mean(torch.stack(outputs), dim=0)
+
+    def training_step(self, batch, batch_idx):
+        x, y = batch
+        logits = self(x)
+        loss = nn.MSELoss()(logits, y)
+        self.log("train_loss", loss, prog_bar=True)
+        return loss
+
+    def validation_step(self, batch, batch_idx):
+        x, y = batch
+        logits = self(x)
+        loss = nn.MSELoss()(logits, y)
+        self.log('val_loss', loss, prog_bar=True)
+        return loss
+    
+    def configure_optimizers(self):
+        return torch.optim.Adam(self.parameters(), lr=self.learning_rate)
